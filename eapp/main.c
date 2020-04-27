@@ -25,15 +25,30 @@
  */
 
 #include <stdint.h>
-#include <netinet/in.h>
-#include "ocall.h"
+#include <unistd.h>
+#include <fcntl.h>
+#include "string.h"
 #include "debug.h"
-#include "syscall.h"
-#include "esyscall.h"
 #include "eapp_utils.h"
 
 void EAPP_ENTRY eapp_entry()
 {
-  PRINTF("Hello world\n");
+  ssize_t size;
+  char buffer[245];
+  
+  int fd = open("/root/foo.txt", O_RDONLY);
+  if (fd < 0) {
+    PRINTF("Can't open file\n");
+    EAPP_RETURN(-1);
+  }
+  
+  for (int i=0; i < 5; i++) {
+    size = read(fd, buffer, 5);
+    buffer[5] = '\0';
+    PRINTF("buff: %s size : %d\n", buffer, size);
+  }
+  
+  close(fd);
+  
   EAPP_RETURN(0);
 }

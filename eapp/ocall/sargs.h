@@ -72,19 +72,40 @@ typedef struct sargs_SYS_accept
   uint8_t addr[];
 } sargs_sys_accept;
 
-typedef struct ret_SYS_accept
-{
-  int ret;
-  uintptr_t addr;
-  socklen_t addrlen;
-} ret_sys_accept;
-
 typedef struct sargs_SYS_connect
 {
   int sockfd;
   socklen_t addrlen;
   uint8_t addr[];
 } sargs_sys_connect;
+
+typedef struct sargs_SYS_open
+{
+  int oflags;
+  char path[];
+} sargs_sys_open;
+
+// typedef struct sargs_SYS_close
+// {
+//   int fd;
+// } sargs_sys_close;
+typedef sargs_SYS_close sargs_sys_close;
+
+
+// typedef struct sargs_SYS_write
+// {
+//   int fd;
+//   size_t count;
+//   uint8_t buf[];
+// } sargs_sys_write;
+typedef struct sargs_SYS_write sargs_sys_write;
+
+// typedef struct sargs_SYS_read
+// {
+//   int fd;
+//   size_t count;
+// } sargs_sys_read;
+typedef sargs_SYS_read sargs_sys_read;
     
 #ifdef __cpluscplus
 }

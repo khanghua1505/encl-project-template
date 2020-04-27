@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "string.h"
@@ -41,7 +42,7 @@
 
 #define OCALL_ID_ESYSCALL       (3)
 
-int sys_socket(int domain, int type, int protocol)
+int socket(int domain, int type, int protocol)
 {
   int ret;
   struct edge_syscall *syscall;
@@ -63,7 +64,7 @@ int sys_socket(int domain, int type, int protocol)
   return ret;
 }
 
-int sys_setsockopt(int sockfd, int level, int optname, 
+int setsockopt(int sockfd, int level, int optname, 
                    const void *optval, socklen_t optlen)
 {
   int ret;
@@ -94,7 +95,7 @@ int sys_setsockopt(int sockfd, int level, int optname,
   return ret;
 }
 
-int sys_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
   int ret;
   struct edge_syscall *syscall;
@@ -122,7 +123,7 @@ int sys_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
   return ret;
 }
 
-int sys_listen(int sockfd, int backlog)
+int listen(int sockfd, int backlog)
 {
   int ret;
   struct edge_syscall *syscall;
@@ -143,7 +144,7 @@ int sys_listen(int sockfd, int backlog)
   return ret;
 }
 
-int sys_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
   int ret;
   uint8_t *buffer;
@@ -187,15 +188,15 @@ int sys_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
   return ret;
 }
 
-int sys_connect(int sockfd, const struct sockaddr *addr, 
+int connect(int sockfd, const struct sockaddr *addr, 
                 socklen_t addrlen)
 {
   int ret;
   struct edge_syscall *syscall;
   sargs_sys_connect *args;
-  int pkgsize = sizeof(struct edge_syscall) \
-                  + sizeof(sargs_sys_connect) \
-                  + addrlen;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                           + sizeof(sargs_sys_connect) \
+                           + addrlen;
                   
   syscall = (struct edge_syscall *) malloc(pkgsize);
   if (syscall == NULL) {
@@ -209,9 +210,131 @@ int sys_connect(int sockfd, const struct sockaddr *addr,
   args->addrlen = addrlen;
   memcpy(args->addr, addr, addrlen);
   
-  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(ret));
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(int));
   
   free(syscall);
+  
+  return ret;
+}
+
+int open(const char *path, int oflags, ...)
+{
+  int ret;
+  struct edge_syscall *syscall;
+  sargs_sys_open *args;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                           + sizeof(sargs_sys_open)
+                           + strlen((char *)path);
+  
+  syscall = (struct edge_syscall *) malloc(pkgsize);
+  if (syscall == NULL) {
+    return -ENOMEM;
+  }
+  
+  args = (sargs_sys_open *) syscall->data;
+  
+  syscall->syscall_num = SYS_open;
+  args->oflags = oflags;
+  memcpy(args->path, path, strlen(path));
+  
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(int));
+  
+  free(syscall);
+  
+  return ret;
+}
+
+int close(int fd)
+{
+  int ret;
+  struct edge_syscall *syscall;
+  sargs_sys_close *args;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                           + sizeof(sargs_sys_close);
+                           
+  syscall = (struct edge_syscall *) malloc(pkgsize);
+  if (syscall == NULL) {
+    return -ENOMEM;
+  }
+  
+  args = (sargs_sys_close *) syscall->data;
+  
+  syscall->syscall_num = SYS_close;
+  args->fd = fd;
+  
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(int));
+  
+  free(syscall);
+  
+  return ret;
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+  ssize_t ret;
+  struct edge_syscall *syscall;
+  sargs_sys_write *args;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                            + sizeof(sargs_sys_write) \
+                            + count;
+  
+  syscall = (struct edge_syscall *) malloc(pkgsize);
+  if (syscall == NULL) {
+    return -ENOMEM;
+  }
+  
+  args = (sargs_sys_write *) syscall->data;
+
+  syscall->syscall_num = SYS_write;
+  args->fd = fd;
+  args->len = count;
+  memcpy(args->buf, buf, count);
+  
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(ssize_t));
+  
+  free(syscall);
+  
+  return ret;
+}
+
+ssize_t read(int fd, void *buf, size_t count)
+{
+  ssize_t ret;
+  struct edge_data retval;
+  struct edge_syscall *syscall;
+  sargs_sys_read *args;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                            + sizeof(sargs_sys_read);
+  
+  syscall = (struct edge_syscall *) malloc(pkgsize);
+  if (syscall == NULL) {
+    return -ENOMEM;
+  }
+  args = (sargs_sys_read *) syscall->data;
+  
+  syscall->syscall_num = SYS_read;
+  args->fd = fd;
+  args->len = count;
+  
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &retval, sizeof(retval));
+  
+  if (retval.size == 0) {
+    return -EINVAL;
+  } 
+  
+  uint8_t *buffer = (uint8_t *) malloc(retval.size);
+  if (buffer == NULL) {
+    free(syscall);
+    return -ENOMEM;
+  }
+  
+  copy_from_shared(buffer, retval.offset, retval.size);
+  
+  memcpy(&ret, buffer, sizeof(ssize_t));
+  memcpy(buf, buffer + sizeof(ssize_t), retval.size - sizeof(ssize_t));
+  
+  free(syscall);
+  free(buffer);
   
   return ret;
 }

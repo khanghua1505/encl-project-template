@@ -29,7 +29,8 @@
 
 #include <stdint.h>
 #include <unistd.h>
-#include "string.h"
+#include<fcntl.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "edge_call.h"
@@ -147,6 +148,64 @@ static void _esys_connect(struct edge_call *edgecall,
   
   _esys_ret(edgecall, &ret, sizeof(int));
 }
+
+static void _esys_open(struct edge_call *edgecall, 
+                       struct edge_syscall *syscall, 
+                       size_t size)
+{
+  int ret;
+  sargs_sys_open *args = \
+      (sargs_sys_open *) syscall->data;
+      
+  ret = open((char *) args->path, args->oflags);
+  
+  _esys_ret(edgecall, &ret, sizeof(int));
+}
+
+static void _esys_close(struct edge_call *edgecall, 
+                       struct edge_syscall *syscall, 
+                       size_t size)
+{
+  int ret;
+  sargs_sys_close *args = \
+      (sargs_sys_close *) syscall->data;
+      
+  ret = close(args->fd);
+  
+  _esys_ret(edgecall, &ret, sizeof(int));
+}
+
+static void _esys_write(struct edge_call *edgecall, 
+                       struct edge_syscall *syscall, 
+                       size_t size)
+{
+  ssize_t ret;
+  sargs_sys_write *args = \
+      (sargs_sys_write *) syscall->data;
+      
+  ret = write(args->fd, (void *) args->buf, args->len);
+  
+  _esys_ret(edgecall, &ret, sizeof(ssize_t));
+}
+
+static void _esys_read(struct edge_call *edgecall, 
+                       struct edge_syscall *syscall, 
+                       size_t size)
+{
+  ssize_t ret;
+  uint8_t buffer[512];
+  sargs_sys_read *args = \
+      (sargs_sys_read *) syscall->data;
+      
+  ret = read(args->fd, buffer + sizeof(ssize_t), args->len);
+  memcpy(buffer, &ret, sizeof(ssize_t));
+      
+  edgecall->return_data.call_status = CALL_STATUS_OK;
+  if (edge_call_setup_wrapped_ret(edgecall, buffer, 
+                sizeof(ssize_t) + ret) != 0) {
+    edgecall->return_data.call_status = CALL_STATUS_BAD_PTR;
+  }
+}
     
 void ocall_esyscall_handle(void *buffer)
 {
@@ -176,6 +235,17 @@ void ocall_esyscall_handle(void *buffer)
       break;
     case SYS_connect:
       _esys_connect(edgecall, syscall, call_args_len);
+      break;
+    case SYS_open:
+      _esys_open(edgecall, syscall, call_args_len);
+      break;
+    case SYS_close:
+      _esys_close(edgecall, syscall, call_args_len);
+    case SYS_write:
+      _esys_write(edgecall, syscall, call_args_len);
+      break;
+    case SYS_read:
+      _esys_read(edgecall, syscall, call_args_len);
       break;
   }
 }
