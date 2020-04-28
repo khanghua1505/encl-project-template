@@ -29,7 +29,7 @@
 
 #include <stdint.h>
 #include <unistd.h>
-#include<fcntl.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -90,6 +90,8 @@ static void _esys_bind(struct edge_call *edgecall,
   sargs_sys_bind *args =  \
       (sargs_sys_bind *) syscall->data;
       
+  struct sockaddr_in *addr = (struct sockaddr_in *) args->sockaddr;
+      
   ret = bind(args->sockfd, (struct sockaddr *) args->sockaddr, 
              args->addrlen);
   
@@ -121,6 +123,9 @@ static void _esys_accept(struct edge_call *edgecall,
   
   sargs_sys_accept *args = \
       (sargs_sys_accept *) syscall->data;
+      
+  addrlen = args->addrlen;
+  memcpy(addr, args->addr, args->addrlen);
       
   ret = accept(args->sockfd, (struct sockaddr *)addr, &addrlen);
   
@@ -206,6 +211,19 @@ static void _esys_read(struct edge_call *edgecall,
     edgecall->return_data.call_status = CALL_STATUS_BAD_PTR;
   }
 }
+
+static void _esys_send(struct edge_call *edgecall, 
+                       struct edge_syscall *syscall, 
+                       size_t size)
+{
+  ssize_t ret;
+  sargs_sys_send *args = \
+      (sargs_sys_send *) syscall->data;
+  
+  ret = send(args->sockfd, (void *) args->buf, args->len, args->flags);
+  
+  _esys_ret(edgecall, &ret, sizeof(ssize_t));
+}
     
 void ocall_esyscall_handle(void *buffer)
 {
@@ -236,16 +254,23 @@ void ocall_esyscall_handle(void *buffer)
     case SYS_connect:
       _esys_connect(edgecall, syscall, call_args_len);
       break;
+    case SYS_bind:
+      _esys_bind(edgecall, syscall, call_args_len);
+      break;
     case SYS_open:
       _esys_open(edgecall, syscall, call_args_len);
       break;
     case SYS_close:
       _esys_close(edgecall, syscall, call_args_len);
+      break;
     case SYS_write:
       _esys_write(edgecall, syscall, call_args_len);
       break;
     case SYS_read:
       _esys_read(edgecall, syscall, call_args_len);
+      break;
+    case SYS_send:
+      _esys_send(edgecall, syscall, call_args_len);
       break;
   }
 }

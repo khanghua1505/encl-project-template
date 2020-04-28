@@ -24,9 +24,6 @@
  * MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  */
 
-#ifndef _SYSCALL_H_
-#define _SYSCALL_H_
-
 #include <stdint.h>
 #include <errno.h>
 #include <unistd.h>
@@ -39,6 +36,8 @@
 #include "syscall.h"
 #include "edge_syscall.h"
 #include "sargs.h"
+#include "ocall.h"
+#include "../debug.h"
 
 #define OCALL_ID_ESYSCALL       (3)
 
@@ -146,43 +145,45 @@ int listen(int sockfd, int backlog)
 
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
-  int ret;
+  int ret = 0;
   uint8_t *buffer;
   struct edge_data retval;
   struct edge_syscall *syscall;
   sargs_sys_accept *args;
   const size_t pkgsize = sizeof(struct edge_syscall) \
-                           + sizeof(sargs_sys_accept);
+                           + sizeof(sargs_sys_accept)
+                           + (*addrlen);
   
   syscall = (struct edge_syscall *) malloc(pkgsize);
   if (syscall == NULL) {
     return -ENOMEM;
   }
-  
   args = (sargs_sys_accept *) syscall->data;
   
   syscall->syscall_num = SYS_accept;
   args->sockfd = sockfd;
+  args->addrlen = *addrlen;
+  memcpy(args->addr, addr, *addrlen);
   
   ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &retval, sizeof(retval));
+  
+  free(syscall);
   
   if (retval.size == 0) {
     return -EINVAL;
   } 
   
-  buffer = (uint8_t *) malloc(retval.size);
+  buffer = (uint8_t *) malloc(retval.size + 1);
   if (buffer == NULL) {
-    free(syscall);
     return -ENOMEM;
   }
   
   copy_from_shared(buffer, retval.offset, retval.size);
   
   memcpy(&ret, buffer, sizeof(int));
-  memcpy(&addrlen, buffer + sizeof(int), sizeof(socklen_t));
-  memcpy(&addr, buffer + sizeof(int) + sizeof(socklen_t), *addrlen);
+  memcpy(addrlen, buffer + sizeof(int), sizeof(socklen_t));
+  memcpy(addr, buffer + sizeof(int) + sizeof(socklen_t), *addrlen);
   
-  free(syscall);
   free(buffer);
   
   return ret;
@@ -339,6 +340,32 @@ ssize_t read(int fd, void *buf, size_t count)
   return ret;
 }
 
-#endif  // _SYSCALL_H_
+ssize_t send(int sockfd, const void *buf, size_t len, int flags)
+{
+  ssize_t ret;
+  struct edge_syscall *syscall;
+  sargs_sys_send *args;
+  const size_t pkgsize = sizeof(struct edge_syscall) \
+                            + sizeof(sargs_sys_send) + 
+                            + len;
+  
+  syscall = (struct edge_syscall *) malloc(pkgsize);
+  if (syscall == NULL) {
+    return -ENOMEM;
+  }
+  args = (sargs_sys_send *) syscall->data;
+  
+  syscall->syscall_num = SYS_send;
+  args->sockfd = sockfd;
+  args->flags = flags;
+  args->len = len;
+  memcpy(args->buf, buf, len);
+  
+  ocall(OCALL_ID_ESYSCALL, syscall, pkgsize, &ret, sizeof(ssize_t));
+  
+  free(syscall);
+  
+  return ret;
+}
 
 

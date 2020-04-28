@@ -105,6 +105,14 @@ typedef struct sargs_SYS_write sargs_sys_write;
 //   size_t count;
 // } sargs_sys_read;
 typedef sargs_SYS_read sargs_sys_read;
+
+typedef struct sargs_SYS_send
+{
+  int sockfd;
+  int flags;
+  size_t len;
+  uint8_t buf[];
+} sargs_sys_send;
     
 #ifdef __cpluscplus
 }
